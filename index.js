@@ -6,7 +6,10 @@ const cheerio = require('cheerio')
 let FormData = require('form-data');
 const path = require('path');
 const fs = require('fs');
+const Iconv = require('iconv').Iconv;
+const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
 const DEBUG = false
+
 class Book {
     constructor() {
         this.name = ''
@@ -15,6 +18,7 @@ class Book {
         this.chapters = []
         this.chapterParser = null
         this.outDir = path.join(__dirname, 'out')
+        this.iconv = null
     }
 
     getFileName() {
@@ -22,7 +26,7 @@ class Book {
     }
 
     formatChapter(chapterText) {
-        return chapterText.replace(/<p>/ig, '').replace(/<\/p>/ig, '\n')
+        return chapterText.replace(/&nbsp;/ig, ' ').replace(/<p>/ig, '').replace(/<\/p>|<br>/ig, '\n')
     }
 
     asyncDownloadChapert(chapter) {
@@ -75,9 +79,10 @@ class Book {
 
     toTxt() {
         let fname = path.join(this.outDir, this.getFileName() + '.txt')
-        fs.writeFile(fname, this.chapters.map(chapter => {
+        let txt = this.getFileName() + '\n======\n\n' + this.chapters.map(chapter => {
             return chapter.text == null ? '' : chapter.text
-        }).join('\n\n'), (err) => {
+        }).join('\n\n')
+        fs.writeFile(fname, txt, (err) => {
             if (err) {
                 return console.log(err);
             }
@@ -100,7 +105,7 @@ function parserQuanbenIo(bookUrl) {
         book.author = $('.list2 span[itemprop="author"]').text().trim();
         //章节列表
         _.each($('.list3 li a'), (domA, i) => {
-            book.chapters.push({id: i, url: url.resolve(bookUrl, domA.attribs.href)})
+            book.chapters.push({ id: i, url: url.resolve(bookUrl, domA.attribs.href) })
         })
         book.chapterParser = (chapterBody, resolve) => {
             //ajax_post('book','ajax','pinyin','jianshen','id','1','sky','e6a285f7aa600dcd7dbb89f7e685b51d','t','1494782614')
@@ -130,12 +135,41 @@ function parserQuanbenIo(bookUrl) {
     })
 }
 
+//http://wap.44pq.com
+function parser44pq(bookUrl) {
+    let book = new Book();
+
+    fetch(bookUrl).then((res) => res.text()).then(body => {
+        let $ = cheerio.load(body);
+        let $bookname = $('.cover h1')
+        book.name = $bookname.text().trim();
+        book.author = $bookname.next('p').find('a').text().trim();
+        //章节列表
+        _.each(_.reverse($('ul.chapter li a')), (domA, i) => {
+            book.chapters.push({ id: i, url: url.resolve(bookUrl, domA.attribs.href) })
+        })
+        // book.chapters = book.chapters.slice(0, 2)
+        book.chapterParser = (chapterBody, resolve) => {
+            let $2 = cheerio.load(chapterBody, { decodeEntities: false });
+            let chapName = $2('#nr_title').text().replace(/(第.+章)/gu, '$1  ')
+            let chap = $2('#txt').html()
+            resolve(chapName + '\n\n' + chap)
+        }
+        book.downloadChapters().then(() => {
+            book.toTxt()
+        })
+    })
+}
+
 function parseURL(u) {
     let myurl = new url.URL(u);
     switch (myurl.hostname) {
         case 'www.quanben.io':
             parserQuanbenIo(u);
             break
+        case 'wap.44pq.com':
+            parser44pq(u);
+            break;
     }
 }
 
