@@ -9,6 +9,7 @@ const fs = require('fs');
 const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
 const DEBUG = false
+const { XsData } = require("./xsdata")
 
 class Book {
     constructor() {
@@ -161,6 +162,49 @@ function parser44pq(bookUrl) {
     })
 }
 
+function parserSite(site, bookUrl) {
+    let book = new Book();
+
+    fetch(bookUrl).then((res) => res.text()).then(body => {
+        let $ = cheerio.load(body);
+        book.name = $(site.bookName).text().trim();
+        book.author = $(site.bookAuthor).text().trim();
+        //章节列表
+        let chapters = []
+        _.each($(site.chapterList), (domA, i) => {
+            let href = domA.attribs.href.trim()
+            if (site.chapterUrlReg.test(href)) {
+                chapters.push(href)
+                // book.chapters.push({ id: 0, url: url.resolve(bookUrl, href) })
+            } else {
+                // console.log(`not match "${href}"`)
+            }
+        })
+        //排序章节
+        book.chapters = _.map(_.uniq(chapters).sort(), (v, i) => {
+            return { id: i, url: url.resolve(bookUrl, v) }
+        })
+        // book.chapters = book.chapters.slice(0, 2)
+        book.chapterParser = (chapterBody, resolve) => {
+            let $2 = cheerio.load(chapterBody, { decodeEntities: false });
+            let chapName = $2(site.chapterName).text().trim()
+            let chap = $2(site.chapterText)
+            //去除广告
+            _.forEach(_.concat(site.chapterAds, ['script']), ad => {
+                chap.find(ad).remove()
+            })
+            let chapTxt = chap.html()
+            _.forEach(site.chapterAdsRe, ad => {
+                chapTxt = chapTxt.replace(_.clone(ad), '')
+            })
+            resolve(chapName + '\n\n' + chapTxt)
+        }
+        book.downloadChapters().then(() => {
+            book.toTxt()
+        })
+    })
+}
+
 function parseURL(u) {
     let myurl = new url.URL(u);
     switch (myurl.hostname) {
@@ -170,6 +214,19 @@ function parseURL(u) {
         case 'wap.44pq.com':
             parser44pq(u);
             break;
+        default:
+            let site = _.find(XsData, (s) => {
+                if (_.isString(s.host)) {
+                    return s.host === myurl.hostname
+                }
+                return s.host.indexOf(myurl.hostname) >= 0
+            })
+            if (site != null) {
+                parserSite(site, u)
+            } else {
+                console.log("没有匹配的站点")
+            }
+            break;
     }
 }
 
@@ -178,14 +235,27 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
+
 if (process.argv.length >= 3) {
     parseURL(process.argv[2])
 } else {
-    rl.question('书籍地址: ', (answer) => {
-        //http://www.quanben.io/n/jianshen/list.html
-        parseURL(answer)
-        // TODO: Log the answer in a database
-        console.log(`Thank you for your valuable feedback: ${answer}`);
-        rl.close();
-    });
+    rl.question("选项\n\t1) 搜索\n\t2) 下载\n", (a1) => {
+        rl.close()
+        switch (a1) {
+            case '1':
+                rl.question('书名: ', (answer) => {
+                    rl.close();
+                });
+                break;
+            case '2':
+                rl.question('书籍地址: ', (answer) => {
+                    //http://www.quanben.io/n/jianshen/list.html
+                    parseURL(answer)
+                    // TODO: Log the answer in a database
+                    console.log(`Thank you for your valuable feedback: ${answer}`);
+                    rl.close();
+                });
+                break;
+        }
+    })
 }
