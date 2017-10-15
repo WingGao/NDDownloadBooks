@@ -15,6 +15,7 @@ class Book {
     constructor() {
         this.name = ''
         this.author = ''
+        this.url = ''
         //{id:0, url:'', text:null}
         this.chapters = []
         this.chapterParser = null
@@ -80,7 +81,7 @@ class Book {
 
     toTxt() {
         let fname = path.join(this.outDir, this.getFileName() + '.txt')
-        let txt = this.getFileName() + '\n======\n\n' + this.chapters.map(chapter => {
+        let txt = this.getFileName() + `\n${this.url}\n======\n\n` + this.chapters.map(chapter => {
             return chapter.text == null ? '' : chapter.text
         }).join('\n\n')
         fs.writeFile(fname, txt, (err) => {
@@ -164,7 +165,7 @@ function parser44pq(bookUrl) {
 
 function parserSite(site, bookUrl) {
     let book = new Book();
-
+    book.url = bookUrl
     fetch(bookUrl).then((res) => res.text()).then(body => {
         let $ = cheerio.load(body);
         book.name = $(site.bookName).text().trim();
