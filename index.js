@@ -2,14 +2,16 @@ const readline = require('readline');
 const url = require('url');
 const _ = require('lodash');
 let fetch = require('node-fetch');
+const http = require('http');
+const HttpsProxyAgent = require('https-proxy-agent');
 const cheerio = require('cheerio')
 let FormData = require('form-data');
 const path = require('path');
 const fs = require('fs');
 const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
-const DEBUG = false
-const { XsData } = require("./xsdata")
+const DEBUG = false //测试专用
+const { XsData, Encoding } = require("./xsdata")
 
 class Book {
     constructor() {
@@ -28,7 +30,9 @@ class Book {
     }
 
     formatChapter(chapterText) {
-        return chapterText.replace(/&nbsp;/ig, ' ').replace(/<p>/ig, '').replace(/<\/p>|<br>/ig, '\n')
+        let txt = chapterText.replace(/&nbsp;/ig, ' ').replace(/<p>|\r/ig, '').replace(/<\/p>|<br>/ig, '\n');
+        debugger
+        return txt.replace(/\n+/ig,'\n') //替换多余换行
     }
 
     asyncDownloadChapert(chapter) {
@@ -163,13 +167,30 @@ function parser44pq(bookUrl) {
     })
 }
 
+function parseHtml($, item) {
+    if(item instanceof RegExp){
+        let res = _.cloneDeep(item).exec($.html())
+        return _.size(res) === 0 ? '':_.last(res);
+    }else {
+        return $(item).text().trim();
+    }
+}
+
+function mFetch(url) {
+    let conf = {
+        agent: DEBUG? new HttpsProxyAgent("http://127.0.0.1:8888"):null,
+    };
+    return fetch(url,conf);
+}
 function parserSite(site, bookUrl) {
     let book = new Book();
     book.url = bookUrl
-    fetch(bookUrl).then((res) => res.text()).then(body => {
-        let $ = cheerio.load(body);
-        book.name = $(site.bookName).text().trim();
-        book.author = $(site.bookAuthor).text().trim();
+    mFetch(bookUrl).then((res) => res.text()).then(body => {
+        let $ = cheerio.load(body, { decodeEntities: false });
+        book.name = parseHtml($,site.bookName);
+        book.author = parseHtml($,site.bookAuthor);
+        console.log('书名：',book.name);
+        console.log('作者：',book.author);
         //章节列表
         let chapters = []
         _.each($(site.chapterList), (domA, i) => {
