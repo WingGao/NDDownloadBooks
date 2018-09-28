@@ -3,7 +3,14 @@ const Encoding = {
     UTF8: 0,
     GBK: 1,
 }
-
+/**
+ * 配置项
+ *
+ *      chapterList: (selector) 表示章节连接，一般是a标签
+ *      proxy: (bool) 是否使用代理
+ *
+ * @type {*[]}
+ */
 const data = [
     {
         name: '166小说',
@@ -33,6 +40,21 @@ const data = [
         chapterText: '#content',
         chapterAds: [],
         chapterAdsRe: [],
+    },
+    {
+        name: '乐读窝',
+        host: 'ldw.la', // http://m.ldw.la 手机版有搜索
+        encode: Encoding.GBK,
+        search: '',
+        bookName: '#box h1',
+        bookAuthor: '#info a:first-child',
+        chapterList: 'body > table a',
+        chapterUrlReg: /^\d+\.html$/,
+        chapterName: '#box h1',
+        chapterText: '#content',
+        chapterAds: [],
+        chapterAdsRe: [],
+        proxy: true,
     },
 ]
 
