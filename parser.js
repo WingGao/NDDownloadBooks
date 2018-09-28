@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
+const { StringDecoder } = require('string_decoder');
 const DEBUG = false //测试专用
 const {XsData, Encoding} = require("./xsdata")
 
@@ -23,6 +24,8 @@ class Book {
         this.chapters = []
         this.chapterParser = null
         this.outDir = path.join(__dirname, 'out')
+        this.tempDir = path.join(__dirname, 'temp')
+        if (!fs.existsSync(this.tempDir)) fs.mkdirSync(this.tempDir);
         this.iconv = null
         this.proxy = false
     }
@@ -32,14 +35,25 @@ class Book {
     }
 
     formatChapter(chapterText) {
-        let txt = chapterText.replace(/&nbsp;/ig, ' ').replace(/<p>|\r/ig, '').replace(/<\/p>|<br>/ig, '\n');
-        debugger
+        let txt = chapterText.replace(/&nbsp;|\u00a0/ig, ' ').replace(/<p>|\r|/ig, '').replace(/<\/p>|<br>/ig, '\n');
+        // debugger
         return txt.replace(/\n+/ig, '\n') //替换多余换行
     }
 
     asyncDownloadChapert(chapter) {
         return new Promise((resolve, reject) => {
-            mFetch(chapter.url, {proxy: this.proxy}).then(res => res.text()).then(body => {
+            //判断缓存
+            let cacheFile = path.join(this.tempDir, chapter.url.replace(/[:/]/g, '_'))
+            let downloadPromise;
+            if (fs.existsSync(cacheFile)) {
+                downloadPromise = Promise.resolve(fs.readFileSync(cacheFile).toString())
+            } else {
+                downloadPromise = mFetch(chapter.url, {proxy: this.proxy}).then(res => res.text()).then(txt => {
+                    fs.writeFileSync(cacheFile, txt)
+                    return txt
+                })
+            }
+            downloadPromise.then(body => {
                 let p1 = new Promise((resolve2, reject2) => {
                     this.chapterParser(body, resolve2)
                 })
@@ -218,6 +232,7 @@ function parserSite(site, bookUrl) {
             return {id: i, url: url.resolve(bookUrl, v)}
         })
         // book.chapters = book.chapters.slice(0, 2)
+        const decoder = new StringDecoder('utf8');
         book.chapterParser = (chapterBody, resolve) => {
             let $2 = cheerio.load(chapterBody, {decodeEntities: false});
             let chapName = $2(site.chapterName).text().trim()
@@ -230,6 +245,8 @@ function parserSite(site, bookUrl) {
             _.forEach(site.chapterAdsRe, ad => {
                 chapHtml = chapHtml.replace(_.clone(ad), '')
             })
+
+
             let chapTxt = cheerio.load(chapHtml).text()
             resolve(chapName + '\n\n' + chapTxt)
         }
