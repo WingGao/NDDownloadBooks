@@ -56,6 +56,21 @@ const data = [
         chapterAdsRe: [],
         proxy: true,
     },
+    {
+        name: '手机看书',
+        host: 'shoujikanshu.cc', // http://m.ldw.la 手机版有搜索
+        encode: Encoding.GBK,
+        search: 'http://www.shoujikanshu.cc/book/keyname.php?q=%s&searchtype=title',
+        bookName: '.box-artic h1',
+        bookAuthor: '',
+        chapterList: '.list a',
+        chapterUrlReg: /^[0-9_]+\.html$/,
+        chapterName: '',
+        chapterText: '.content',
+        chapterAds: ['.addresses'],
+        chapterAdsRe: [],
+        proxy: true,
+    },
 ]
 
 module.exports = {

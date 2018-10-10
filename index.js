@@ -12,7 +12,6 @@ if (process.argv.length >= 3) {
     parseURL(process.argv[2])
 } else {
     rl.question("选项\n\t1) 搜索\n\t2) 下载\n", (a1) => {
-        rl.close()
         switch (a1) {
             case '1':
                 rl.question('书名: ', (answer) => {

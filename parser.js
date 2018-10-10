@@ -9,8 +9,9 @@ const path = require('path');
 const fs = require('fs');
 const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
-const { StringDecoder } = require('string_decoder');
+const {StringDecoder} = require('string_decoder');
 const DEBUG = false //测试专用
+// const DEBUG = true //测试专用
 const {XsData, Encoding} = require("./xsdata")
 
 const ProxyHttp = 'http://localhost:8032'
@@ -200,7 +201,7 @@ function mFetch(url, conf) {
         conf.proxy = null
         conf.agent = new HttpsProxyAgent(ProxyHttp)
     }
-    return fetch(url, conf);
+    return fetch(url.trim(), conf);
 }
 
 function parserSite(site, bookUrl) {
@@ -227,7 +228,7 @@ function parserSite(site, bookUrl) {
         })
         //排序章节
         book.chapters = _.map(_.uniq(chapters).sort((a, b) => {
-            return parseInt(a) - parseInt(b)
+            return parseInt(a.replace('_', '0')) - parseInt(b.replace('_', '0'))
         }), (v, i) => {
             return {id: i, url: url.resolve(bookUrl, v)}
         })
