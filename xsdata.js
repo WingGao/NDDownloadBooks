@@ -71,6 +71,21 @@ const data = [
         chapterAdsRe: [],
         proxy: true,
     },
+    {
+        name: '飞舞',
+        host: 'www.fwtxt.org',
+        encode: Encoding.GBK,
+        search: '',
+        bookName: '#thread_subject',
+        bookAuthor: '',
+        chapterList: '.mz_reader_catelog a',
+        chapterUrlReg: /mz_reader-mzreader\.html\?tid=\d+&aid=\d+&page=(\d+)$/,
+        chapterName: '',
+        chapterText: '#txt_content',
+        chapterAds: [],
+        chapterAdsRe: [],
+        proxy: true,
+    },
 ]
 
 module.exports = {

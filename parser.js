@@ -44,7 +44,7 @@ class Book {
     asyncDownloadChapert(chapter) {
         return new Promise((resolve, reject) => {
             //判断缓存
-            let cacheFile = path.join(this.tempDir, chapter.url.replace(/[:/]/g, '_'))
+            let cacheFile = path.join(this.tempDir, chapter.url.replace(/[:/?]/g, '_'))
             let downloadPromise;
             if (fs.existsSync(cacheFile)) {
                 downloadPromise = Promise.resolve(fs.readFileSync(cacheFile).toString())
