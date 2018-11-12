@@ -9,11 +9,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^0.18.0",
     "cheerio": "^0.22.0",
     "form-data": "^2.1.4",
     "https-proxy-agent": "^2.1.1",
     "iconv": "^2.3.0",
     "lodash": "^4.17.4",
-    "node-fetch": "^1.6.3"
+    "node-fetch": "^1.6.3",
+    "tunnel": "^0.0.6"
   }
 }

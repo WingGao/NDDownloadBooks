@@ -1,6 +1,10 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const url = require('url');
 const _ = require('lodash');
 let fetch = require('node-fetch');
+const axios = require('axios');
+const tunnel = require('tunnel');
 const http = require('http');
 const HttpsProxyAgent = require('https-proxy-agent');
 const cheerio = require('cheerio')
@@ -9,12 +13,18 @@ const path = require('path');
 const fs = require('fs');
 const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
-const {StringDecoder} = require('string_decoder');
+const { StringDecoder } = require('string_decoder');
 const DEBUG = false //测试专用
 // const DEBUG = true //测试专用
-const {XsData, Encoding} = require("./xsdata")
+const { XsData, Encoding } = require("./xsdata")
 
-const ProxyHttp = 'http://localhost:8032'
+// const ProxyHttp = 'http://localhost:8020'
+// const ProxyHttp = 'http://localhost:8888'
+const ProxyHttp = {
+    host: 'localhost',
+    // port: 8888,
+    port: 8020,
+}
 
 class Book {
     constructor() {
@@ -28,7 +38,7 @@ class Book {
         this.tempDir = path.join(__dirname, 'temp')
         if (!fs.existsSync(this.tempDir)) fs.mkdirSync(this.tempDir);
         this.iconv = null
-        this.proxy = false
+        this.site = null
     }
 
     getFileName() {
@@ -49,7 +59,7 @@ class Book {
             if (fs.existsSync(cacheFile)) {
                 downloadPromise = Promise.resolve(fs.readFileSync(cacheFile).toString())
             } else {
-                downloadPromise = mFetch(chapter.url, {proxy: this.proxy}).then(res => res.text()).then(txt => {
+                downloadPromise = mFetch(chapter.url, { site: this.site }).then(res => res.text()).then(txt => {
                     fs.writeFileSync(cacheFile, txt)
                     return txt
                 })
@@ -128,7 +138,7 @@ function parserQuanbenIo(bookUrl) {
         book.author = $('.list2 span[itemprop="author"]').text().trim();
         //章节列表
         _.each($('.list3 li a'), (domA, i) => {
-            book.chapters.push({id: i, url: url.resolve(bookUrl, domA.attribs.href)})
+            book.chapters.push({ id: i, url: url.resolve(bookUrl, domA.attribs.href) })
         })
         book.chapterParser = (chapterBody, resolve) => {
             //ajax_post('book','ajax','pinyin','jianshen','id','1','sky','e6a285f7aa600dcd7dbb89f7e685b51d','t','1494782614')
@@ -169,11 +179,11 @@ function parser44pq(bookUrl) {
         book.author = $bookname.next('p').find('a').text().trim();
         //章节列表
         _.each(_.reverse($('ul.chapter li a')), (domA, i) => {
-            book.chapters.push({id: i, url: url.resolve(bookUrl, domA.attribs.href)})
+            book.chapters.push({ id: i, url: url.resolve(bookUrl, domA.attribs.href) })
         })
         // book.chapters = book.chapters.slice(0, 2)
         book.chapterParser = (chapterBody, resolve) => {
-            let $2 = cheerio.load(chapterBody, {decodeEntities: false});
+            let $2 = cheerio.load(chapterBody, { decodeEntities: false });
             let chapName = $2('#nr_title').text().replace(/(第.+章)/gu, '$1  ')
             let chap = $2('#txt').html()
             resolve(chapName + '\n\n' + chap)
@@ -193,49 +203,94 @@ function parseHtml($, item) {
     }
 }
 
-function mFetch(url, conf) {
+function mFetch(url1, conf) {
     conf = _.merge({
-        agent: DEBUG ? new HttpsProxyAgent("http://127.0.0.1:8888") : null,
+        // agent: DEBUG ? new HttpsProxyAgent("http://127.0.0.1:8888") : null,
+        headers: {
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+        },
+        responseEncoding: 'hex',
+        site: {},
     }, conf);
-    if (conf.proxy) {
-        conf.proxy = null
-        conf.agent = new HttpsProxyAgent(ProxyHttp)
+    let client;
+    let site = conf.site
+    conf.site = null
+    if (site.cookies) {
+        conf.headers['cookie'] = site.cookies
     }
-    return fetch(url.trim(), conf);
+    if (site.proxy) {
+        conf.proxy = null
+        // conf.agent = new HttpsProxyAgent(ProxyHttp)
+        const tpip = tunnel.httpsOverHttp({
+            proxy: ProxyHttp
+        });
+        let url2 = url1.split('/', 4)
+        const httpClient = axios.create(_.merge(conf, {
+            baseURL: url2[0] + '//' + url2[2],
+            httpsAgent: tpip,
+            proxy: false,
+        }));
+        client = httpClient.get('/' + url2[3])
+    }
+    // return fetch(url.trim(), conf);
+    if (client == null) {
+        client = axios.get(url1.trim(), conf)
+    }
+    return client.then(res => {
+        return {
+            text() {
+                let html = iconv.convert(new Buffer(res.data, 'hex'))
+                return html
+            }
+        }
+    });
 }
 
 function parserSite(site, bookUrl) {
     let book = new Book();
     book.url = bookUrl
-    book.proxy = site.proxy
+    book.site = site
 
-    mFetch(bookUrl, {proxy: site.proxy}).then((res) => res.text()).then(body => {
-        let $ = cheerio.load(body, {decodeEntities: false});
+    mFetch(bookUrl, { site })
+        .then((res) => res.text()).then(body => {
+        let $ = cheerio.load(body, { decodeEntities: false });
         book.name = parseHtml($, site.bookName);
         book.author = parseHtml($, site.bookAuthor);
         console.log('书名：', book.name);
         console.log('作者：', book.author);
         //章节列表
         let chapters = []
-        _.each($(site.chapterList), (domA, i) => {
-            let href = domA.attribs.href.trim()
-            if (site.chapterUrlReg.test(href)) {
-                chapters.push(href)
-                // book.chapters.push({ id: 0, url: url.resolve(bookUrl, href) })
-            } else {
-                // console.log(`not match "${href}"`)
+        if (site.chapterUrlPageLastReg != null) { //页码的方式
+            let groups = site.chapterUrlPageLastReg.exec(body)
+            let baseUrl = groups[1]
+            let maxPage = parseInt(groups[2])
+            let pageNumReg = new RegExp(site.chapterUrlPageNumRegT)
+            for (let i = site.chapterUrlPageFirst; i <= maxPage; i++) {
+                let chapUrl = baseUrl.replace(pageNumReg, site.chapterUrlPageNumRegT.replace('\\d+', i))
+                chapters.push(chapUrl)
             }
-        })
+            console.log(groups)
+        } else {
+            _.each($(site.chapterList), (domA, i) => {
+                let href = domA.attribs.href.trim()
+                if (site.chapterUrlReg.test(href)) {
+                    chapters.push(href)
+                    // book.chapters.push({ id: 0, url: url.resolve(bookUrl, href) })
+                } else {
+                    // console.log(`not match "${href}"`)
+                }
+            })
+        }
         //排序章节
         book.chapters = _.map(_.uniq(chapters).sort((a, b) => {
             return parseInt(a.replace('_', '0')) - parseInt(b.replace('_', '0'))
         }), (v, i) => {
-            return {id: i, url: url.resolve(bookUrl, v)}
+            return { id: i, url: url.resolve(bookUrl, v) }
         })
         // book.chapters = book.chapters.slice(0, 2)
         const decoder = new StringDecoder('utf8');
         book.chapterParser = (chapterBody, resolve) => {
-            let $2 = cheerio.load(chapterBody, {decodeEntities: false});
+            let $2 = cheerio.load(chapterBody, { decodeEntities: false });
             let chapName = $2(site.chapterName).text().trim()
             let chap = $2(site.chapterText)
             //去除广告
@@ -247,8 +302,8 @@ function parserSite(site, bookUrl) {
                 chapHtml = chapHtml.replace(_.clone(ad), '')
             })
 
-
-            let chapTxt = cheerio.load(chapHtml).text()
+            let chapJq = cheerio.load(chapHtml.replace(/<br[ /]?>/ig, '\n'))
+            let chapTxt = chapJq.text()
             resolve(chapName + '\n\n' + chapTxt)
         }
         book.downloadChapters().then(() => {

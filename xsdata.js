@@ -86,6 +86,24 @@ const data = [
         chapterAdsRe: [],
         proxy: true,
     },
+    {
+        name: '草榴',
+        // host: 'w.xiaocao.ze.cx',
+        host: 't66y.com',
+        encode: Encoding.GBK,
+        // cookies: 'ismob=1',
+        search: '',
+        bookName: 'form[name="delatc"] th.h',
+        bookAuthor: '',
+        chapterUrlPageFirst: 1, //首页
+        chapterUrlPageLastReg: /href="([^"]+page=(\d+))" id="last"/, //页数
+        chapterUrlPageNumRegT: '&page=\\d+',//页数模式
+        chapterName: '',
+        chapterText: '.tpc_content',
+        chapterAds: [],
+        chapterAdsRe: [],
+        proxy: true,
+    },
 ]
 
 module.exports = {
